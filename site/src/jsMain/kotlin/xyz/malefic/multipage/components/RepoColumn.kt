@@ -1,187 +1,135 @@
 package xyz.malefic.multipage.components
 
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.web.events.SyntheticMouseEvent
-import com.varabyte.kobweb.compose.css.Cursor.Companion.Pointer
+import com.varabyte.kobweb.compose.css.Cursor
 import com.varabyte.kobweb.compose.css.Overflow
 import com.varabyte.kobweb.compose.css.Transition
-import com.varabyte.kobweb.compose.foundation.layout.Arrangement
 import com.varabyte.kobweb.compose.foundation.layout.Box
-import com.varabyte.kobweb.compose.foundation.layout.Row
 import com.varabyte.kobweb.compose.ui.Alignment
 import com.varabyte.kobweb.compose.ui.Modifier
+import com.varabyte.kobweb.compose.ui.modifiers.backgroundColor
+import com.varabyte.kobweb.compose.ui.modifiers.borderRadius
 import com.varabyte.kobweb.compose.ui.modifiers.color
 import com.varabyte.kobweb.compose.ui.modifiers.cursor
 import com.varabyte.kobweb.compose.ui.modifiers.fillMaxWidth
-import com.varabyte.kobweb.compose.ui.modifiers.margin
+import com.varabyte.kobweb.compose.ui.modifiers.height
 import com.varabyte.kobweb.compose.ui.modifiers.maxWidth
 import com.varabyte.kobweb.compose.ui.modifiers.onClick
-import com.varabyte.kobweb.compose.ui.modifiers.opacity
 import com.varabyte.kobweb.compose.ui.modifiers.overflow
 import com.varabyte.kobweb.compose.ui.modifiers.padding
 import com.varabyte.kobweb.compose.ui.modifiers.position
+import com.varabyte.kobweb.compose.ui.modifiers.scale
 import com.varabyte.kobweb.compose.ui.modifiers.size
 import com.varabyte.kobweb.compose.ui.modifiers.transition
-import com.varabyte.kobweb.compose.ui.modifiers.translateX
+import com.varabyte.kobweb.compose.ui.modifiers.translateY
 import com.varabyte.kobweb.compose.ui.modifiers.zIndex
 import com.varabyte.kobweb.compose.ui.styleModifier
-import com.varabyte.kobweb.silk.components.icons.fa.FaChevronLeft
-import com.varabyte.kobweb.silk.components.icons.fa.FaChevronRight
-import kotlinx.browser.window
-import org.jetbrains.compose.web.css.Position.Companion.Absolute
-import org.jetbrains.compose.web.css.Position.Companion.Relative
+import com.varabyte.kobweb.silk.components.icons.fa.FaChevronDown
+import com.varabyte.kobweb.silk.components.icons.fa.FaChevronUp
+import kotlinx.coroutines.delay
+import org.jetbrains.compose.web.css.Position
 import org.jetbrains.compose.web.css.ms
-import org.jetbrains.compose.web.css.percent
 import org.jetbrains.compose.web.css.px
 import xyz.malefic.multipage.api.Repository
 
 @Composable
 internal fun RepoColumn(repos: List<Repository>) {
-    var currentIndex by remember { mutableStateOf(0) }
-    val cardsPerView = rememberCardsPerView()
+    // If repos is empty, don't render anything
+    if (repos.isEmpty()) return
 
-    val canScrollLeft = currentIndex > 0
-    val canScrollRight = currentIndex < repos.size - cardsPerView
-    val totalPages = (repos.size - cardsPerView + 1).coerceAtLeast(0)
+    // Create a circular version of repos for infinite scrolling
+    // We need at least 3 items for proper display
+    val circularRepos = if (repos.size >= 3) repos else List(3) { repos[it % repos.size] }
 
-    Box(
-        modifier =
-            Modifier
-                .fillMaxWidth()
-                .maxWidth(1200.px)
-                .position(Relative),
-    ) {
-        // Navigation controls
-        NavigationButtons(
-            canScrollLeft = canScrollLeft,
-            canScrollRight = canScrollRight,
-            onPrevious = { currentIndex = (currentIndex - 1).coerceAtLeast(0) },
-            onNext = { currentIndex = (currentIndex + 1).coerceAtMost(repos.size - cardsPerView) },
-        )
+    // State for current center card index
+    var centerIndex by remember { mutableStateOf(0) }
 
-        // Repository cards
-        RepoCardsContainer(
-            repos = repos,
-            currentIndex = currentIndex,
-            cardsPerView = cardsPerView,
-        )
+    // Auto-scrolling effect
+    var autoScrollEnabled by remember { mutableStateOf(true) }
 
-        // Pagination indicators
-        if (repos.size > cardsPerView) {
-            PaginationIndicators(
-                totalPages = totalPages,
-                currentIndex = currentIndex,
-                onPageSelected = { currentIndex = it },
-            )
-        }
-    }
-}
-
-@Composable
-private fun rememberCardsPerView(): Int {
-    var cardsPerView by remember { mutableStateOf(1) }
-
-    val resizeListener =
-        remember {
-            { _: dynamic ->
-                cardsPerView = calculateCardsPerView(window.innerWidth.toDouble())
+    LaunchedEffect(autoScrollEnabled) {
+        if (autoScrollEnabled) {
+            while (true) {
+                delay(5000) // Scroll every 5 seconds
+                centerIndex = (centerIndex + 1) % circularRepos.size
             }
         }
-
-    LaunchedEffect(Unit) {
-        cardsPerView = calculateCardsPerView(window.innerWidth.toDouble())
-        window.addEventListener("resize", resizeListener)
     }
 
-    DisposableEffect(Unit) {
-        onDispose {
-            window.removeEventListener("resize", resizeListener)
-        }
-    }
+    // Define card heights
+    val smallCardHeight = 180
+    val largeCardHeight = 250
+    val totalCarouselHeight = smallCardHeight * 2 + largeCardHeight + 40 // 40px for spacing
 
-    return cardsPerView
-}
-
-private fun calculateCardsPerView(width: Double): Int =
-    when {
-        width > 1200 -> 3
-        width > 768 -> 2
-        else -> 1
-    }
-
-@Composable
-private fun NavigationButtons(
-    canScrollLeft: Boolean,
-    canScrollRight: Boolean,
-    onPrevious: (SyntheticMouseEvent) -> Unit,
-    onNext: (SyntheticMouseEvent) -> Unit,
-) {
-    if (canScrollLeft) {
-        NavigationButton(isLeft = true, onClick = onPrevious)
-    }
-
-    if (canScrollRight) {
-        NavigationButton(isLeft = false, onClick = onNext)
-    }
-}
-
-@Composable
-private fun NavigationButton(
-    isLeft: Boolean,
-    onClick: (SyntheticMouseEvent) -> Unit,
-) {
     Box(
         modifier =
             Modifier
-                .position(Absolute)
-                .zIndex(10)
-                .size(40.px)
-                .cursor(Pointer)
-                .styleModifier {
-                    property("top", "50%")
-                    property(if (isLeft) "left" else "right", "10px")
-                    property("transform", "translateY(-50%)")
-                }.onClick(onClick),
-        contentAlignment = Alignment.Center,
-    ) {
-        if (isLeft) {
-            FaChevronLeft(modifier = Modifier.color(neonGreen))
-        } else {
-            FaChevronRight(modifier = Modifier.color(neonGreen))
-        }
-    }
-}
-
-@Composable
-private fun RepoCardsContainer(
-    repos: List<Repository>,
-    currentIndex: Int,
-    cardsPerView: Int,
-) {
-    Row(
-        modifier =
-            Modifier
                 .fillMaxWidth()
-                .overflow(Overflow.Hidden),
+                .maxWidth(800.px)
+                .height(totalCarouselHeight.px)
+                .position(Position.Relative)
+                .padding(top = 40.px, bottom = 40.px),
     ) {
-        Row(
+        // Overlay navigation buttons
+        NavigationButton(
+            isUp = true,
+            onClick = {
+                autoScrollEnabled = false
+                centerIndex = (centerIndex - 1 + circularRepos.size) % circularRepos.size
+            },
+        )
+
+        NavigationButton(
+            isUp = false,
+            onClick = {
+                autoScrollEnabled = false
+                centerIndex = (centerIndex + 1) % circularRepos.size
+            },
+        )
+
+        // Main carousel container
+        Box(
             modifier =
                 Modifier
-                    .transition(Transition.of(property = "transform", duration = 500.ms))
-                    .translateX((-currentIndex * (100 / cardsPerView)).percent),
-            horizontalArrangement = Arrangement.spacedBy(16.px),
+                    .fillMaxWidth()
+                    .height(totalCarouselHeight.px)
+                    .overflow(Overflow.Hidden),
         ) {
-            repos.forEachIndexed { index, repo ->
-                RepoCardItem(
+            // We need to display 3 cards: previous, current, and next
+            for (offset in -1..1) {
+                val index = (centerIndex + offset + circularRepos.size) % circularRepos.size
+                val repo = circularRepos[index]
+
+                // Position of card: -1 = top, 0 = center, 1 = bottom
+                val isCentered = offset == 0
+                val yPosition =
+                    when (offset) {
+                        -1 -> 0
+                        0 -> smallCardHeight + 20 // Top card height + spacing
+                        else -> smallCardHeight + largeCardHeight + 40 // Top + center heights + spacing
+                    }
+
+                RepositoryCard(
                     repo = repo,
-                    isVisible = index >= currentIndex && index < currentIndex + cardsPerView,
-                    cardsPerView = cardsPerView,
+                    isCentered = isCentered,
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .height(if (isCentered) largeCardHeight.px else smallCardHeight.px)
+                            .position(Position.Absolute)
+                            .translateY(yPosition.px)
+                            .transition(Transition.of("all", 500.ms))
+                            .zIndex(if (isCentered) 2 else 1)
+                            .scale(if (isCentered) 1.05 else 0.95)
+                            .styleModifier {
+                                property("transform-origin", "center")
+                            },
                 )
             }
         }
@@ -189,19 +137,75 @@ private fun RepoCardsContainer(
 }
 
 @Composable
-private fun RepoCardItem(
-    repo: Repository,
-    isVisible: Boolean,
-    cardsPerView: Int,
+private fun NavigationButton(
+    isUp: Boolean,
+    onClick: (SyntheticMouseEvent) -> Unit,
 ) {
     Box(
         modifier =
             Modifier
+                .size(50.px)
+                .position(Position.Absolute)
+                .zIndex(10)
                 .styleModifier {
-                    property("flex", "0 0 ${100 / cardsPerView}%")
-                }.padding(8.px)
-                .transition(Transition.of(property = "opacity", duration = 300.ms))
-                .opacity(if (isVisible) 1.0 else 0.3),
+                    property(if (isUp) "top" else "bottom", "0")
+                    property("left", "50%")
+                    property("transform", "translateX(-50%)")
+                }.backgroundColor(neonGreenWithAlpha(0.1f))
+                .borderRadius(25.px)
+                .cursor(Cursor.Pointer)
+                .transition(Transition.of("background-color", 300.ms))
+                .onClick(onClick)
+                .styleModifier {
+                    property("&:hover", "{ background-color: ${neonGreenWithAlpha(0.2f)}; }")
+                },
+        contentAlignment = Alignment.Center,
+    ) {
+        if (isUp) {
+            FaChevronUp(modifier = Modifier.color(neonGreen).size(20.px))
+        } else {
+            FaChevronDown(modifier = Modifier.color(neonGreen).size(20.px))
+        }
+    }
+}
+
+@Composable
+private fun RepositoryCard(
+    repo: Repository,
+    isCentered: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    Box(
+        modifier =
+            modifier
+                .padding(leftRight = 16.px, topBottom = 8.px)
+                .styleModifier {
+                    property(
+                        "background",
+                        if (isCentered) {
+                            "linear-gradient(145deg, #1e1e1e, #2a2a2a)"
+                        } else {
+                            "linear-gradient(145deg, #181818, #222222)"
+                        },
+                    )
+                    property(
+                        "box-shadow",
+                        if (isCentered) {
+                            "0 8px 16px rgba(57, 255, 20, 0.15)"
+                        } else {
+                            "0 4px 8px rgba(0, 0, 0, 0.2)"
+                        },
+                    )
+                    property("border-radius", "12px")
+                    property(
+                        "border",
+                        if (isCentered) {
+                            "1px solid ${neonGreenWithAlpha(0.3f)}"
+                        } else {
+                            "1px solid rgba(255, 255, 255, 0.1)"
+                        },
+                    )
+                },
     ) {
         RepoCard(
             repoName = repo.name,
@@ -212,52 +216,4 @@ private fun RepoCardItem(
                 },
         )
     }
-}
-
-@Composable
-private fun PaginationIndicators(
-    totalPages: Int,
-    currentIndex: Int,
-    onPageSelected: (Int) -> Unit,
-) {
-    Row(
-        modifier =
-            Modifier
-                .fillMaxWidth()
-                .margin(top = 24.px)
-                .position(Absolute)
-                .styleModifier {
-                    property("bottom", "-40px")
-                    property("left", "0")
-                },
-        horizontalArrangement = Arrangement.Center,
-    ) {
-        repeat(totalPages) { i ->
-            PaginationDot(
-                isActive = i == currentIndex,
-                onClick = { onPageSelected(i) },
-            )
-        }
-    }
-}
-
-@Composable
-private fun PaginationDot(
-    isActive: Boolean,
-    onClick: (SyntheticMouseEvent) -> Unit,
-) {
-    Box(
-        modifier =
-            Modifier
-                .size(10.px)
-                .margin(right = 8.px)
-                .cursor(Pointer)
-                .styleModifier {
-                    property("border-radius", "50%")
-                    property(
-                        "background-color",
-                        if (isActive) neonGreen.toString() else "rgba(57, 255, 20, 0.3)",
-                    )
-                }.onClick(onClick),
-    )
 }
